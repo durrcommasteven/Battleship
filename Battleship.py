@@ -8,9 +8,27 @@ import pickle
 
 """
 plan: 
+boards will be 10x10 battleship layouts
+b[i][j] == 0 -> miss
+b[i][j] == 1 -> hit
 
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Make a nn with 2 hidden layers, train it on data with the goal of predicting the full board
+(try to model P(hit | knowledge of board))
+data = 10x10 array of zeros, with n spots randomly revealed to be hits or misses
+here: 
+data[i][j] == 1 -> hit
+data[i][j] == -1 -> miss
+data[i][j] == 0 -> unknown
 
+labels = fully revealed board
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Use nn to pick the next most likely spot that a battleship will be, given hit/miss history
+pick that spot and add to history
 """
+
+#so I can easily save and open the weights/biases
 def SaveData(data, saveas): 
     pickle.dump(data, open(saveas, 'wb'), protocol = pickle.HIGHEST_PROTOCOL)
 
@@ -32,8 +50,7 @@ def validplacement(i, j, horz, board, boat):
 			if board[i][j+k] == 1: #theres already a boat there
 				return False
 		return True
-
-		
+	
 def place(i, j, horz, board, boat):
 	if horz:
 		for k in range(boat):
@@ -42,9 +59,6 @@ def place(i, j, horz, board, boat):
 		for k in range(boat):
 			board[i][j+k] = 1
 	return board
-
-
-
 
 def randboard():
 	t1 = time.time()
@@ -71,21 +85,28 @@ def randboard():
 	#print(t2-t1)
 	return board
 
-"""
-def givedata(n):
-	label = randboard()
-	xs = np.random.choice(10, n)
-	ys = np.random.choice(10, n)
-	unknown_val = 2+3+3+4+5
-	for c in range(n):
-		unknown_val-=label[xs[c]][ys[c]]
+def randcheck(n):
+	#check how rotationally symmetric the board is in the limit
+	diffs = []
+	def rot_diference(board):
+		a = np.rot90(board)
+		b = np.rot90(a)
+		c = np.rot90(b)
+		return np.sum(np.abs(board-a))+np.sum(np.abs(board-b))+np.sum(np.abs(board-c))
 
-	data = np.ones([10,10])*unknown_val/(100-n)
-	for c in range(n):
-		data[xs[c]][ys[c]] = label[xs[c]][ys[c]]
+	x = np.zeros([10,10])
+	for i in range(n):
+		x+= randboard()
+		
+		diffs.append(rot_diference(x)/(i+1))
+	x/=n
+	plt.figure()
+	plt.imshow(x, cmap = 'Greys', interpolation = 'nearest')
+	plt.figure()
+	plt.plot(diffs)
+	plt.show()
 
-	return data.flatten(), label.flatten()
-"""
+
 def givedata(n, autoencode = False):
 	label = randboard()
 	if autoencode: 
@@ -111,15 +132,6 @@ def batch_data(batchsize, autoencode = False):
 		ls.append(l)
 	return ds, ls
 
-"""
-d, l = givedata(20)
-for i in d:
-	print(i)
-
-for i in l:
-	print(i)
-"""
-
 
 def weight(shape):
 	return tf.Variable(tf.truncated_normal(shape, mean = 0, stddev = 1/np.sqrt(shape[0])))
@@ -132,14 +144,9 @@ def sigmoid(x):
 
 run = False
 
-d_t, l_t = givedata(10, autoencode=True)
-
-d_t = [d_t]
-l_t = [l_t]
 
 if run:
 	x_ = tf.placeholder(shape = [None, 100], dtype = tf.float32)
-
 	y_ = tf.placeholder(shape = [None, 100], dtype = tf.float32)
 
 	w1 = weight([100, 100])
@@ -157,8 +164,6 @@ if run:
 
 	loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(logits = logit, labels = y_))
 
-	#loss = tf.reduce_mean(0.5*(tf.sigmoid(logit)-y_)**2)
-
 	trainstep = tf.train.AdamOptimizer(learning_rate=0.001, beta1=0.9, beta2=0.999, epsilon=1e-08).minimize(loss)
 
 	init = tf.global_variables_initializer()
@@ -174,14 +179,6 @@ if run:
 		for i in range(reps):
 			if i%100 ==0:
 				print(i/reps)
-				#out = sigmoid(sess.run(logit, feed_dict={x_: d_t}))
-				#out = np.reshape(out, [10,10])
-				#thing = np.reshape(d_t, [10,10])
-				#plt.figure()
-				#plt.imshow(thing, interpolation = 'nearest', cmap = 'Greys')
-				#plt.figure()
-				#plt.imshow(out, interpolation = 'nearest', cmap = 'Greys')
-				#plt.show()
 
 			ds, ls = batch_data(b_size, autoencode=False)
 			feed_dict = {x_ : ds, y_ : ls}
@@ -220,60 +217,15 @@ def model(x):
 
 	return np.reshape(sigmoid(logit), [10,10])
 
+#examining the model
 
-"""
-d, l = givedata(20, autoencode=False)
-d = np.reshape(d, [10, 10])
-l = np.reshape(l, [10,10])
-prediction = model(d)
-plt.figure()
-plt.imshow(l, interpolation = 'nearest', cmap = 'Greys')
-plt.figure()
-plt.imshow(d, interpolation = 'nearest', cmap = 'Greys')
-plt.figure()
-plt.imshow(prediction, interpolation = 'nearest', cmap = 'Greys')
-plt.show()
-"""
-
-d = np.zeros([10, 10])
-prediction = model(d)
-print(np.max(prediction))
-plt.imshow(prediction, interpolation = 'nearest', cmap = 'Greys')
-
-"""
-d = np.zeros([10, 10])
-d[0][0] = 1
-prediction = model(d)
-plt.figure()
-plt.imshow(prediction, interpolation = 'nearest', cmap = 'Greys')
-
-d = np.zeros([10, 10])
-d[9][0] = 1
-prediction = model(d)
-plt.figure()
-plt.imshow(prediction, interpolation = 'nearest', cmap = 'Greys')
-
-d = np.zeros([10, 10])
-d[0][9] = 1
-prediction = model(d)
-plt.figure()
-plt.imshow(prediction, interpolation = 'nearest', cmap = 'Greys')
-
-d = np.zeros([10, 10])
-d[9][0] = 1
-prediction = model(d)
-plt.figure()
-plt.imshow(prediction, interpolation = 'nearest', cmap = 'Greys')
-"""
-
-
-
-
-
-
-plt.show()
-
-
+def pdf(i, j, hit = True):
+	#probabilities given a hit/ miss at point i, j
+	d = np.zeros([10, 10])
+	d[i][j] = 1 if hit else -1
+	prediction = model(d)
+	plt.imshow(prediction, interpolation = 'nearest', cmap = 'Greys')
+	plt.show()
 
 def makemove(board, history):
 	#board is the full board
@@ -309,11 +261,9 @@ def showit(board, history):
 	board = board -0.5
 	for p in history:
 		board[p[0]][p[1]]*=2
-	#plt.ion()
-	plt.imshow(board, interpolation='nearest')
-	#time.sleep(3) 
+	plt.imshow(board, interpolation='nearest', cmap = 'Greys')
 	plt.show()
-	#plt.close()
+
 
 
 def player(board, show = True):
@@ -321,29 +271,13 @@ def player(board, show = True):
 
 	history = []
 	
-	"""
-	if show: 
-		fig = plt.figure()
-		def update(new_b):
-			fig.clear()
-			p = plt.imshow(board,interpolation='nearest')
-			plt.draw()
-	"""
-
 	while not gameover(board, history):
 		move = makemove(board, history)
 		history.append(move)
-		"""
+		
 		if show:
+			showit(board, history)
 
-			animation.FuncAnimation(fig, )
-		
-		"""
-		showit(board, history)
-			
-
-		
-		
 	return len(history)
 
 def getdist(n):
@@ -353,10 +287,6 @@ def getdist(n):
 
 	return moves
 
-#plt.plot(getdist(10000))
-plt.show()
-
-print(player(randboard()))
 
 
 
