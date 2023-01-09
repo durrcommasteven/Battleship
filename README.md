@@ -1,6 +1,6 @@
 # Battleship
 
-A super-fast implementation of a model that plays Battleship.
+A super-fast implementation of a neural network model that plays Battleship.
 
  - `Battleship_Model.py` defines the model
  - `Battleship.py` defines a few functions that lets the battleship model to actually play
